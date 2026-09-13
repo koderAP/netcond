@@ -24,7 +24,7 @@ def resolve_device(name: str = "auto") -> str:
     return "cpu"
 
 
-def build_models(latent_dim: int = 16, hidden_dim: int = 64) -> CoupledLoop:
+def build_models(latent_dim: int = 32, hidden_dim: int = 128) -> CoupledLoop:
     app = ConditionedMarkedTPP(feedback_dim=latent_dim, hidden_dim=hidden_dim)
     net = FlowNetwork(latent_dim=latent_dim, hidden_dim=hidden_dim)
     return CoupledLoop(app, net)
@@ -51,8 +51,8 @@ def train_loop(
     adaptive_joint: bool = True,
     unconditioned: bool = False,
     batch_size: int = 32,
-    hidden_dim: int = 64,
-    latent_dim: int = 16,
+    hidden_dim: int = 128,
+    latent_dim: int = 32,
 ) -> dict:
     device = resolve_device(device)
     torch.manual_seed(seed)
@@ -143,17 +143,23 @@ def save_checkpoint(loop: CoupledLoop, path: str | Path, history=None) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(
-        {"app": loop.app.state_dict(), "net": loop.net.state_dict(), "history": history},
+        {
+            "app": loop.app.state_dict(),
+            "net": loop.net.state_dict(),
+            "history": history,
+            "cfg": {"latent_dim": loop.net.latent_dim, "hidden_dim": loop.app.hidden_dim},
+        },
         path,
     )
 
 
 def load_checkpoint(path: str | Path, device: str = "cpu") -> CoupledLoop:
-    loop = build_models()
     try:
         blob = torch.load(path, map_location=device, weights_only=False)
     except TypeError:
         blob = torch.load(path, map_location=device)
+    cfg = blob.get("cfg") or {}
+    loop = build_models(latent_dim=cfg.get("latent_dim", 32), hidden_dim=cfg.get("hidden_dim", 128))
     loop.app.load_state_dict(blob["app"])
     loop.net.load_state_dict(blob["net"])
     loop.app.to(device)

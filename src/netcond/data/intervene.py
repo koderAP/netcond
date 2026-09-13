@@ -13,10 +13,8 @@ import random
 from pathlib import Path
 
 from netcond.realize.emulator import DumbbellRealizer, label_epochs, transfer_time
+from netcond.ladder import BITRATE_LADDER_BPS, CHUNK_DURATION_S
 from netcond.types import Conditions, Epoch, Trace, preset_conditions
-
-BITRATE_LADDER_BPS = (200_000, 500_000, 1_000_000, 2_500_000, 5_000_000)
-CHUNK_DURATION_S = 2.0
 HTTP_REQUEST = 400
 
 

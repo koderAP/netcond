@@ -44,3 +44,13 @@ def test_tpp_sample_shapes():
     assert tr.epochs[0].transfer_time_b is not None
     z0 = loop.rollout(preset_conditions("wan"), ctx[0], n_steps=4, unconditioned=True)
     assert z0.metadata["unconditioned"] is True
+
+
+def test_think_head_ignores_z():
+    app = ConditionedMarkedTPP(feedback_dim=8, hidden_dim=16)
+    h = app.initial_state(2)
+    ctx = torch.zeros(2, 4)
+    p0, _ = app.step(h, ctx, torch.zeros(2, 8))
+    p1, _ = app.step(h, ctx, torch.ones(2, 8))
+    assert torch.allclose(p0["t_mu"], p1["t_mu"])
+    assert not torch.allclose(p0["ladder_logits"], p1["ladder_logits"])

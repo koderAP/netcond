@@ -95,6 +95,23 @@ def evaluate(
                 unconditioned=True,
             )
             uncond_fid = fidelity_report(real, usyn)
+        lan = generate(loop, "lan", app_kind=app_kind, n_sessions=8, n_steps=8, seed=30 + i)
+        cong = generate(loop, "congested", app_kind=app_kind, n_sessions=8, n_steps=8, seed=30 + i)
+        real_lan = [tr for tr in holdout if tr.app_kind == app_kind and tr.conditions.preset == "lan"]
+        real_c = [tr for tr in holdout if tr.app_kind == app_kind and tr.conditions.preset == "congested"]
+
+        def _mean_b(trs):
+            xs = [e.b for tr in trs for e in tr.epochs]
+            return float(sum(xs) / len(xs)) if xs else float("nan")
+
+        b_shift = {
+            "neural_lan": _mean_b(lan),
+            "neural_congested": _mean_b(cong),
+            "real_lan": _mean_b(real_lan),
+            "real_congested": _mean_b(real_c),
+            "neural_lan_gt_cong": _mean_b(lan) > _mean_b(cong),
+            "real_lan_gt_cong": _mean_b(real_lan) > _mean_b(real_c) if real_lan and real_c else None,
+        }
         cf = counterfactual_table(
             loop, holdout, train, from_preset="lan", to_preset="congested", app_kind=app_kind
         )
@@ -107,6 +124,7 @@ def evaluate(
                 "uncond": uncond_fid,
                 "counterfactual": cf,
                 "rtt_2x": rtt2,
+                "b_shift": b_shift,
                 "privacy": ngram_overlap(train, syn),
                 "wavelet": wavelet_or_skip(syn),
                 "utility_tstr": tstr_condition_id(train_app, syn_all, real_all),
@@ -125,6 +143,9 @@ def evaluate(
         "tstr_acc": _mean_std(per_seed, ("utility_tstr", "tstr_acc")),
         "trtr_acc": _mean_std(per_seed, ("utility_tstr", "trtr_acc")),
         "rtt_2x_direction_ok": [r["rtt_2x"]["direction_ok"] for r in per_seed],
+        "neural_b_lan_gt_cong": [r["b_shift"]["neural_lan_gt_cong"] for r in per_seed],
+        "mean_b_lan": _mean_std(per_seed, ("b_shift", "neural_lan")),
+        "mean_b_congested": _mean_std(per_seed, ("b_shift", "neural_congested")),
         "headline": "mean±std over seeds; not a single best iteration. Not KS pass-rate.",
     }
     return {"summary": summary, "per_seed": per_seed}
@@ -147,6 +168,8 @@ def format_table(report: dict) -> str:
         f"Q-Q MAE log b                 | {fmt(s['neural_qq_b'])} | n/a | n/a",
         f"TSTR condition-id acc         | {fmt(s['tstr_acc'])} | n/a | TRTR {fmt(s['trtr_acc'])}",
         f"2×RTT direction ok            | {s['rtt_2x_direction_ok']} | n/a | n/a",
+        f"mean b lan vs congested       | {fmt(s['mean_b_lan'])} vs {fmt(s['mean_b_congested'])} | n/a | n/a",
+        f"lan>cong chunk size           | {s['neural_b_lan_gt_cong']} | n/a | n/a",
         f"seeds                         | {s['seeds']} | {s['seeds']} | {s['seeds']}",
     ]
     return "\n".join(lines)

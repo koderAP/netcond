@@ -46,14 +46,10 @@ class CoupledLoop:
             else:
                 z_in = z if adaptive_feedback else z_frozen.detach()
             params, h = self.app.step(h, context, z_in, prev)
-            from netcond.app.tpp import sample_mix_lognormal
-
-            a = sample_mix_lognormal(params["a_w"], params["a_mu"], params["a_s"], gen).clamp(80, 20_000)
-            b = sample_mix_lognormal(params["b_w"], params["b_mu"], params["b_s"], gen).clamp(500, 5_000_000)
-            t = sample_mix_lognormal(params["t_w"], params["t_mu"], params["t_s"], gen).clamp(1e-3, 30.0)
+            s = self.app.sample_marks(params, context, gen)
+            a, b, t, d = s["a"], s["b"], s["t"], s["direction"]
             if i == n_steps - 1:
                 t = torch.zeros_like(t)
-            d = torch.argmax(params["dir_logits"], dim=-1)
             feat = torch.stack([a.log(), b.log()], dim=-1)
             z, obs = self.net.step(z, feat, c)
             epochs.append(
