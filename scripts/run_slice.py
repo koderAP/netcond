@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from netcond.data.dataset import split_traces
+from netcond.data.intervene import collect_dataset, load_traces
 from netcond.eval.report import evaluate, format_table
 from netcond.generate import generate
 from netcond.realize.emulator import DumbbellRealizer
