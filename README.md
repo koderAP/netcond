@@ -37,18 +37,23 @@ pytest -q
 python examples/minimal_slice.py
 python scripts/run_slice.py --epochs 18 --n-per-preset 8
 
-## Prithvi A40 slice (3 seeds, mean ± std)
+## Prithvi A40 (3 seeds, mean ± std)
 
-First GPU run (contiguous split — **TSTR invalid**). After physics residual + stratified split, re-run `output/prithvi`.
+Trained on `prithvi.cse.iitd.ac.in` (NVIDIA A40). Contiguous split made TSTR degenerate; **run 2** uses stratified `(app, preset)` splits and a physics residual network head (`rtt = base_rtt × (1+softplus)`, transfer anchored to serialization+RTT).
+
+**Run 2** (`output/prithvi2`, 60 epochs, 16 traces/preset/app):
 
 | metric | neural | uncond TPP | tmix-resample |
 |---|---|---|---|
-| EMD log b | 1.85 ± 0.08 | 1.99 ± 0.25 | 2.59 ± 0.01 |
-| EMD log think t | 0.56 ± 0.11 | — | **0.035 ± 0.01** |
-| EMD log transfer | 1.34 ± 0.21 | — | 1.00 ± 0.02 |
-| 2×RTT direction | 3/3 True (ratio ~1.3, under-scaled) | — | — |
+| EMD log response `b` | 1.55 ± 0.43 | 2.33 ± 0.05 | **0.98 ± 0.13** |
+| EMD log think `t` | 0.39 ± 0.11 | — | **0.05 ± 0.02** |
+| EMD log transfer | 1.33 ± 0.19 | — | **0.84 ± 0.05** |
+| TSTR condition-id | 0.36 ± 0.10 | — | TRTR **1.00 ± 0.00** |
+| 2× base RTT | **3/3 True**, ratio **~1.95** (was ~1.3) | — | — |
 
-Neural beats resample on response-size `b` (the adaptive mark). Resample still wins think time (exogenous, copied from train). Network RTT head needed a `base_rtt × (1+softplus)` residual — that is the second slice.
+Counterfactual RTT under `congested` now matches holdout (~0.17s vs ~0.17s). Transfer times are still short vs emulator (queueing residual underfit). Resample remains the think-time / size-marginal baseline to beat; conditioned TPP beats the **unconditioned** TPP on `b` (1.55 vs 2.33).
+
+**Run 1** (invalid TSTR, unconstrained RTT): neural `b` EMD 1.85 vs resample 2.59 — not comparable after the split fix.
 ```
 
 `run_slice.py` collects interventional traces (HTTP GET + DASH-like client under `lan`/`wan`/`congested`), trains **3 seeds** of the conditioned model **and** a TempoNet-style unconditioned TPP, generates `lan` vs `congested`, and prints neural vs uncond vs Tmix-resample (mean ± std). Output: `output/slice/eval_table.txt`.
