@@ -40,23 +40,23 @@ python scripts/run_slice.py --epochs 18 --n-per-preset 8
 
 ## Prithvi A40 (3 seeds, mean ± std)
 
-Trained on `prithvi.cse.iitd.ac.in` (NVIDIA A40). **Run 3** is the headline: DASH bitrate ladder conditioned on `z`, think-time head without `z` (Tmix), slow-start/cross-traffic transfer decoder, stratified `do(c)` split.
+Trained on `prithvi.cse.iitd.ac.in` (NVIDIA A40). **Run 4** is the SoTA table: condition-matched **session-level Tmix** for in-distribution fidelity, plus **Tmix replay of lan vectors under congested** (classical closed-loop replay cannot change DASH `b`).
 
-**Run 3** (`output/prithvi3`, 80 epochs, 24 traces/preset/app):
+**Run 4** (`output/prithvi4`, 80 epochs, 24 traces/preset/app):
 
-| metric | neural | uncond TPP | tmix-resample |
+| metric | neural | uncond TPP (TempoNet-style) | Tmix |
 |---|---|---|---|
-| EMD log response `b` | **0.081 ± 0.062** | 1.084 ± 0.447 | 0.899 ± 0.109 |
-| EMD log think `t` | 0.247 ± 0.079 | — | **0.059 ± 0.022** |
-| EMD log transfer | **0.345 ± 0.118** | — | 0.797 ± 0.031 |
-| Q–Q MAE log `b` | **0.074 ± 0.051** | — | — |
-| TSTR condition-id | **1.00 ± 0.00** | — | TRTR 1.00 |
-| 2× base RTT | **3/3 True** (ratio 1.6–1.9) | — | — |
-| mean chunk `b` lan vs congested | **1.25e6 vs 1.30e5** (3/3) | — | — |
+| EMD log `b` (in-dist, matched preset) | **0.031 ± 0.005** | 0.654 ± 0.014 | 0.031 ± 0.014 |
+| EMD log think `t` | 0.248 ± 0.031 | — | **0.031 ± 0.006** |
+| EMD log transfer | **0.515 ± 0.018** | — | 0.726 ± 0.016 |
+| TSTR condition-id | 0.94 ± 0.00 | — | TRTR 1.00 |
+| 2× base RTT | **3/3 True** (ratio 1.7–1.9) | — | — |
+| \|mean `b` − real\| under `do(congested)` | **4.5e4 ± 6.1e4** | — | Tmix-replay lan **1.14e6 ± 0** |
+| neural beats Tmix on CF `b` | **3/3** | — | — |
 
-Conditioning on `do(c)` beats Tmix resampling **and** a TempoNet-style unconditioned TPP on the adaptive mark `b` and on transfer time. TSTR matches train-real-test-real. Think time remains a resample problem (exogenous). Congested transfer is still a bit short vs the emulator (~2–4s vs ~4.6s).
+In-distribution chunk size is a **tie** with Tmix (both ~0.03 EMD). The gap that Tmix/Swing/NetReplica cannot close: replay of source-condition connection vectors keeps ~1.25 MB chunks on a congested path; the conditioned ladder matches real `do(congested)` (~1.1e5 B). Unconditioned TPP loses in-dist `b` by 20×. Think time is still Tmix’s (exogenous). Transfer CF remains a bit short (2–3.7 s vs 4.6 s).
 
-Run 2 (continuous log-normal `b`): neural lost to resample on `b` (1.55 vs 0.98). Run 1 used a contiguous split (TSTR invalid).
+Run 3 mixed-preset Tmix was a weak baseline (neural `b` 0.08 vs 0.90). Run 2 continuous log-normal `b` lost to resample. Run 1 contiguous split (TSTR invalid).
 
 `run_slice.py` collects interventional traces, trains 3 seeds plus an unconditioned TPP, and prints the table. This repo does not modify `netgen_cod892`.
 
