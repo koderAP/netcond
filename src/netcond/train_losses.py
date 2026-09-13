@@ -77,8 +77,8 @@ def total_loss(
     net_obs: dict[str, Tensor],
     batch: Batch,
     *,
-    lambda_q: float = 0.1,
-    lambda_ac: float = 0.05,
+    lambda_q: float = 0.2,
+    lambda_ac: float = 0.08,
     phase: str = "joint",
 ) -> dict[str, Tensor]:
     mask = batch.mask
@@ -102,11 +102,11 @@ def total_loss(
         l_net = l_net + masked_mean((net_obs["rtt"] - batch.rtt).pow(2) / (batch.rtt.clamp_min(1e-3) ** 2 + 1e-6), rtt_mask)
 
     if phase == "pretrain_app":
-        total = l_marks + l_t + lambda_q * l_q + lambda_ac * l_ac
+        total = l_marks + 2.0 * l_t + lambda_q * l_q + lambda_ac * l_ac
     elif phase == "pretrain_net":
         total = l_net
     else:
-        total = l_marks + l_t + l_net + lambda_q * l_q + lambda_ac * l_ac
+        total = l_marks + 2.0 * l_t + l_net + lambda_q * l_q + lambda_ac * l_ac
     return {
         "total": total,
         "L_marks": l_marks.detach(),

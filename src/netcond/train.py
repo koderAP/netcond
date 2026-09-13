@@ -61,10 +61,10 @@ def train_loop(
     loop = build_models(latent_dim=latent_dim, hidden_dim=hidden_dim)
     loop.app.to(device)
     loop.net.to(device)
-    opt = Adam(list(loop.app.parameters()) + list(loop.net.parameters()), lr=3e-3)
+    n_app = max(1, epochs // 5)
+    n_net = max(1, (2 * epochs) // 5)
+    opt = Adam(list(loop.app.parameters()) + list(loop.net.parameters()), lr=2e-3)
     history: list[dict] = []
-    n_app = max(1, epochs // 3)
-    n_net = max(1, epochs // 3)
     full = traces_to_batch(traces, device=device)
     n = full.a.size(0)
     for ep in range(epochs):

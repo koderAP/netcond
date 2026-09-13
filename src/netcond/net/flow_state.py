@@ -55,9 +55,11 @@ class FlowNetwork(nn.Module):
         base_rtt = (10.0 ** c[:, 1]) / 1e3
         sizes = epoch_feat.to(z.device).exp()
         xt = c[:, 4].clamp(0, 1)
-        load = 0.5 * torch.sigmoid(self.load_head(z)).squeeze(-1)
-        cap_eff = cap_bps * (1.0 - 0.45 * xt) * (1.0 - load)
-        cap_eff = cap_eff.clamp(min=0.12 * cap_bps)
+        is_chunk = (sizes[:, 1] > 40_000).float()
+        extra = 0.35 * is_chunk
+        load = 0.4 * torch.sigmoid(self.load_head(z)).squeeze(-1)
+        cap_eff = cap_bps * (1.0 - extra) * (1.0 - 0.45 * xt) * (1.0 - load)
+        cap_eff = cap_eff.clamp(min=0.10 * cap_bps)
         serial_a = sizes[:, 0] * 8.0 / cap_eff.clamp_min(1.0)
         serial_b = sizes[:, 1] * 8.0 / cap_eff.clamp_min(1.0)
         queue = torch.nn.functional.softplus(self.rtt_head(z)).squeeze(-1)

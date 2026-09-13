@@ -78,8 +78,12 @@ class ConditionedMarkedTPP(nn.Module):
         self.t_s = nn.Linear(hidden_dim, k)
         self.dir = nn.Linear(hidden_dim, 2)
         self.ladder = nn.Linear(hidden_dim, N_LADDER)
-        nn.init.constant_(self.t_mu.bias, math.log(0.05))
-        nn.init.constant_(self.t_s.bias, -2.0)
+        self.t_dash_mu = nn.Linear(hidden_dim, 1)
+        self.t_dash_s = nn.Linear(hidden_dim, 1)
+        nn.init.constant_(self.t_mu.bias, math.log(0.35))
+        nn.init.constant_(self.t_s.bias, -1.5)
+        nn.init.constant_(self.t_dash_mu.bias, math.log(0.055))
+        nn.init.constant_(self.t_dash_s.bias, -2.2)
 
     def initial_state(self, batch_size: int, device: str | None = None) -> Tensor:
         return torch.zeros(batch_size, self.hidden_dim, device=device)
@@ -96,7 +100,9 @@ class ConditionedMarkedTPP(nn.Module):
             "b_s": self.b_s(f),
             "t_w": self.t_w(f),
             "t_mu": self.t_mu(f),
-            "t_s": self.t_s(f).clamp(max=-1.2),
+            "t_s": self.t_s(f).clamp(max=-0.8),
+            "t_dash_mu": self.t_dash_mu(f).squeeze(-1),
+            "t_dash_s": self.t_dash_s(f).squeeze(-1).clamp(max=-2.0, min=-4.0),
             "dir_logits": self.dir(f),
             "ladder_logits": self.ladder(g),
         }
@@ -113,14 +119,17 @@ class ConditionedMarkedTPP(nn.Module):
 
     def sample_marks(self, params: dict[str, Tensor], context: Tensor, generator: torch.Generator | None = None) -> dict[str, Tensor]:
         a = sample_mix_lognormal(params["a_w"], params["a_mu"], params["a_s"], generator).clamp(80, 20_000)
-        t = sample_mix_lognormal(params["t_w"], params["t_mu"], params["t_s"], generator).clamp(1e-3, 30.0)
+        t_http = sample_mix_lognormal(params["t_w"], params["t_mu"], params["t_s"], generator).clamp(1e-3, 30.0)
+        gen = generator if params["t_dash_mu"].device.type == "cpu" else None
+        eps = torch.randn(params["t_dash_mu"].shape, generator=gen, device=params["t_dash_mu"].device)
+        t_dash = torch.exp(params["t_dash_mu"] + params["t_dash_s"].exp() * eps).clamp(1e-3, 1.0)
+        dash = (context[:, 0] > 0.5).to(a.dtype)
+        t = dash * t_dash + (1.0 - dash) * t_http
         d = torch.argmax(params["dir_logits"], dim=-1)
         mix_b = sample_mix_lognormal(params["b_w"], params["b_mu"], params["b_s"], generator).clamp(500, 5_000_000)
         probs = torch.softmax(params["ladder_logits"], dim=-1)
-        gen = generator if params["ladder_logits"].device.type == "cpu" else None
         k = torch.multinomial(probs, 1, generator=gen).squeeze(-1)
         lad = ladder_tensor(a.device, a.dtype)[k]
-        dash = (context[:, 0] > 0.5).to(a.dtype)
         b = dash * lad + (1.0 - dash) * mix_b
         return {"a": a, "b": b, "t": t, "direction": d.float()}
 
@@ -150,10 +159,19 @@ class ConditionedMarkedTPP(nn.Module):
             nll_b.append(ad * nll_l + (1.0 - ad) * nll_mix_b)
             nll_lad.append(nll_l)
             think = t[:, i].float()
-            nll_ti = mix_lognormal_nll(think.clamp_min(EPS), p["t_w"], p["t_mu"], p["t_s"])
+            nll_mix_t = mix_lognormal_nll(think.clamp_min(EPS), p["t_w"], p["t_mu"], p["t_s"])
+            nll_dash_t = mix_lognormal_nll(
+                think.clamp_min(EPS),
+                torch.zeros_like(p["t_dash_mu"]).unsqueeze(-1),
+                p["t_dash_mu"].unsqueeze(-1),
+                p["t_dash_s"].unsqueeze(-1),
+            )
+            nll_ti = ad * nll_dash_t + (1.0 - ad) * nll_mix_t
             nll_t.append(nll_ti * (think > EPS).float())
-            w = torch.softmax(p["t_w"], dim=-1)
-            e_logt.append((w * p["t_mu"]).sum(-1))
+            e_logt.append(
+                ad * p["t_dash_mu"]
+                + (1.0 - ad) * (torch.softmax(p["t_w"], dim=-1) * p["t_mu"]).sum(-1)
+            )
             nll_d.append(torch.nn.functional.cross_entropy(p["dir_logits"], d[:, i].long(), reduction="none"))
             prev = torch.stack(
                 [

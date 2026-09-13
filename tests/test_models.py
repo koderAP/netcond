@@ -46,6 +46,20 @@ def test_tpp_sample_shapes():
     assert z0.metadata["unconditioned"] is True
 
 
+def test_dash_think_is_tight():
+    app = ConditionedMarkedTPP(feedback_dim=8, hidden_dim=16)
+    app.eval()
+    with torch.no_grad():
+        h = app.initial_state(64)
+        ctx = torch.zeros(64, 4)
+        ctx[:, 0] = 1.0
+        p, _ = app.step(h, ctx, torch.zeros(64, 8))
+        ts = [app.sample_marks(p, ctx, None)["t"] for _ in range(4)]
+    t = torch.cat(ts)
+    assert float(t.std()) < 0.08
+    assert 0.02 < float(t.mean()) < 0.15
+
+
 def test_think_head_ignores_z():
     app = ConditionedMarkedTPP(feedback_dim=8, hidden_dim=16)
     h = app.initial_state(2)
@@ -53,4 +67,5 @@ def test_think_head_ignores_z():
     p0, _ = app.step(h, ctx, torch.zeros(2, 8))
     p1, _ = app.step(h, ctx, torch.ones(2, 8))
     assert torch.allclose(p0["t_mu"], p1["t_mu"])
+    assert torch.allclose(p0["t_dash_mu"], p1["t_dash_mu"])
     assert not torch.allclose(p0["ladder_logits"], p1["ladder_logits"])
