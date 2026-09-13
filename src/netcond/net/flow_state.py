@@ -27,6 +27,7 @@ class FlowNetwork(nn.Module):
         self.tt_head = nn.Sequential(nn.Linear(latent_dim, hidden_dim), nn.SiLU(), nn.Linear(hidden_dim, 2))
         self.rtt_head = nn.Sequential(nn.Linear(latent_dim, hidden_dim), nn.SiLU(), nn.Linear(hidden_dim, 1))
         self.loss_head = nn.Sequential(nn.Linear(latent_dim, hidden_dim), nn.SiLU(), nn.Linear(hidden_dim, 1))
+        self.load_head = nn.Linear(latent_dim, 1)
 
     def encode_conditions(self, conditions: Tensor) -> Tensor:
         return self.cond_enc(conditions.to(next(self.parameters()).device, dtype=torch.float32))
@@ -54,15 +55,18 @@ class FlowNetwork(nn.Module):
         base_rtt = (10.0 ** c[:, 1]) / 1e3
         sizes = epoch_feat.to(z.device).exp()
         xt = c[:, 4].clamp(0, 1)
-        cap_eff = cap_bps * (1.0 - 0.45 * xt).clamp(min=0.15 * cap_bps)
+        load = 0.5 * torch.sigmoid(self.load_head(z)).squeeze(-1)
+        cap_eff = cap_bps * (1.0 - 0.45 * xt) * (1.0 - load)
+        cap_eff = cap_eff.clamp(min=0.12 * cap_bps)
         serial_a = sizes[:, 0] * 8.0 / cap_eff.clamp_min(1.0)
         serial_b = sizes[:, 1] * 8.0 / cap_eff.clamp_min(1.0)
-        rtt = base_rtt * (1.0 + torch.nn.functional.softplus(self.rtt_head(z)).squeeze(-1))
+        queue = torch.nn.functional.softplus(self.rtt_head(z)).squeeze(-1)
+        rtt = base_rtt + queue
         nseg_b = (sizes[:, 1] / 1460.0).clamp(min=1.0)
         rounds = torch.log2((nseg_b / 10.0).clamp(min=1.0)) + 1.0
         res = torch.tanh(self.tt_head(z))
         transfer_a = (serial_a + rtt).clamp_min(1e-6) * torch.exp(res[:, 0])
-        transfer_b = (serial_b + rtt * rounds * (1.0 + 0.5 * xt)).clamp_min(1e-6) * torch.exp(res[:, 1])
+        transfer_b = (serial_b + rtt * rounds).clamp_min(1e-6) * torch.exp(res[:, 1])
         loss_p = torch.sigmoid(self.loss_head(z))
         obs = {
             "log_transfer_a": transfer_a.clamp_min(1e-6).log(),

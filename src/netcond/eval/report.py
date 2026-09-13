@@ -146,6 +146,9 @@ def evaluate(
         "neural_b_lan_gt_cong": [r["b_shift"]["neural_lan_gt_cong"] for r in per_seed],
         "mean_b_lan": _mean_std(per_seed, ("b_shift", "neural_lan")),
         "mean_b_congested": _mean_std(per_seed, ("b_shift", "neural_congested")),
+        "tmix_cf_err_b": _mean_std(per_seed, ("counterfactual", "tmix_replay_from_source", "abs_err_b")),
+        "neural_cf_err_b": _mean_std(per_seed, ("counterfactual", "tmix_replay_from_source", "neural_abs_err_b")),
+        "neural_beats_tmix_cf": [r["counterfactual"]["tmix_replay_from_source"]["neural_beats_tmix_on_cf_b"] for r in per_seed],
         "headline": "mean±std over seeds; not a single best iteration. Not KS pass-rate.",
     }
     return {"summary": summary, "per_seed": per_seed}
@@ -170,6 +173,8 @@ def format_table(report: dict) -> str:
         f"2×RTT direction ok            | {s['rtt_2x_direction_ok']} | n/a | n/a",
         f"mean b lan vs congested       | {fmt(s['mean_b_lan'])} vs {fmt(s['mean_b_congested'])} | n/a | n/a",
         f"lan>cong chunk size           | {s['neural_b_lan_gt_cong']} | n/a | n/a",
+        f"|mean b-real| do(congested)   | {fmt(s['neural_cf_err_b'])} | n/a | Tmix-replay {fmt(s['tmix_cf_err_b'])}",
+        f"neural beats Tmix CF on b     | {s['neural_beats_tmix_cf']} | n/a | n/a",
         f"seeds                         | {s['seeds']} | {s['seeds']} | {s['seeds']}",
     ]
     return "\n".join(lines)

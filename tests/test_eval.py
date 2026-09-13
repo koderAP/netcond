@@ -28,6 +28,38 @@ def test_jsd_identical_hist():
     assert jsd(p, p) < 1e-12
 
 
+def test_tmix_replay_does_not_shift_dash_b(tmp_path):
+    from netcond.data.intervene import collect_dataset
+    from netcond.eval.baseline_resample import tmix_replay_counterfactual
+    from netcond.types import preset_conditions
+
+    traces = collect_dataset(
+        tmp_path / "cf.json",
+        n_per_preset=3,
+        presets=("lan", "congested"),
+        apps=("dash_like",),
+        seed=4,
+    )
+    replay = tmix_replay_counterfactual(
+        traces,
+        from_preset="lan",
+        to_conditions=preset_conditions("congested"),
+        app_kind="dash_like",
+        n_sessions=4,
+        n_steps=8,
+        seed=0,
+    )
+    lan_b = sum(e.b for tr in traces if tr.conditions.preset == "lan" for e in tr.epochs) / max(
+        1, sum(len(tr.epochs) for tr in traces if tr.conditions.preset == "lan")
+    )
+    replay_b = sum(e.b for tr in replay for e in tr.epochs) / max(1, sum(len(tr.epochs) for tr in replay))
+    cong_b = sum(e.b for tr in traces if tr.conditions.preset == "congested" for e in tr.epochs) / max(
+        1, sum(len(tr.epochs) for tr in traces if tr.conditions.preset == "congested")
+    )
+    assert replay_b > 0.5 * lan_b
+    assert replay_b > cong_b
+
+
 def test_wasserstein_shift():
     x = np.array([0.0, 1.0, 2.0])
     y = x + 3.0

@@ -78,6 +78,8 @@ class ConditionedMarkedTPP(nn.Module):
         self.t_s = nn.Linear(hidden_dim, k)
         self.dir = nn.Linear(hidden_dim, 2)
         self.ladder = nn.Linear(hidden_dim, N_LADDER)
+        nn.init.constant_(self.t_mu.bias, math.log(0.05))
+        nn.init.constant_(self.t_s.bias, -2.0)
 
     def initial_state(self, batch_size: int, device: str | None = None) -> Tensor:
         return torch.zeros(batch_size, self.hidden_dim, device=device)
@@ -94,7 +96,7 @@ class ConditionedMarkedTPP(nn.Module):
             "b_s": self.b_s(f),
             "t_w": self.t_w(f),
             "t_mu": self.t_mu(f),
-            "t_s": self.t_s(f),
+            "t_s": self.t_s(f).clamp(max=-1.2),
             "dir_logits": self.dir(f),
             "ladder_logits": self.ladder(g),
         }

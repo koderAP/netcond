@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from netcond.couple.loop import CoupledLoop
-from netcond.eval.baseline_resample import resample_traces
+from netcond.eval.baseline_resample import resample_traces, tmix_replay_counterfactual
 from netcond.eval.fidelity import field_metrics
 from netcond.generate import generate
 from netcond.realize.emulator import label_epochs
@@ -92,6 +92,23 @@ def counterfactual_table(
         real_to = [tr for tr in holdout if tr.app_kind == app_kind and tr.conditions.preset == to_preset]
     gen = generate(loop, to_preset, app_kind=app_kind, n_sessions=n_sessions, n_steps=8, seed=2)
     base = resample_traces(train, c_to, n_sessions=n_sessions, n_steps=8, seed=2, app_kind=app_kind)
+    replay = tmix_replay_counterfactual(
+        train,
+        from_preset=from_preset,
+        to_conditions=c_to,
+        app_kind=app_kind,
+        n_sessions=n_sessions,
+        n_steps=8,
+        seed=2,
+    )
+
+    def _mean_b(trs: list[Trace]) -> float:
+        xs = [e.b for tr in trs for e in tr.epochs]
+        return sum(xs) / len(xs) if xs else float("nan")
+
+    real_b = _mean_b(real_to)
+    neural_b = _mean_b(gen)
+    replay_b = _mean_b(replay)
     return {
         "from": from_preset,
         "to": to_preset,
@@ -103,12 +120,20 @@ def counterfactual_table(
             "mean_transfer_real": mean_metric(real_to, "transfer_b") if real_to else None,
             "mean_rtt_neural": mean_metric(gen, "rtt"),
             "mean_rtt_real": mean_metric(real_to, "rtt") if real_to else None,
+            "mean_b": neural_b,
         },
         "resample_vs_real": {
             "transfer_b": field_metrics(real_to, base, "transfer_b", log=True) if real_to else {},
             "rtt": field_metrics(real_to, base, "rtt") if real_to else {},
             "mean_transfer_resample": mean_metric(base, "transfer_b"),
             "mean_rtt_resample": mean_metric(base, "rtt"),
+        },
+        "tmix_replay_from_source": {
+            "mean_b": replay_b,
+            "abs_err_b": abs(replay_b - real_b) if real_to else float("nan"),
+            "neural_abs_err_b": abs(neural_b - real_b) if real_to else float("nan"),
+            "neural_beats_tmix_on_cf_b": abs(neural_b - real_b) < abs(replay_b - real_b) if real_to else False,
+            "note": "Tmix replays a-b-t from from_preset; DASH chunk size does not adapt under do(to).",
         },
         "causal_caveat": "Holdout is interventional P(traffic | do(c)). Do not read this as CausalSim adjustment of passive traces.",
     }
