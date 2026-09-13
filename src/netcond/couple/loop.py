@@ -29,15 +29,17 @@ class CoupledLoop:
         unconditioned: bool = False,
         generator: torch.Generator | None = None,
     ) -> Trace:
-        device = context.device
-        c = conditions.as_tensor(device).unsqueeze(0)
-        z = self.net.initial_state(c, 1, device=str(device) if device else None)
-        h = self.app.initial_state(1, device=str(device) if device else None)
+        device = next(self.app.parameters()).device
         if context.dim() == 1:
             context = context.unsqueeze(0)
+        context = context.to(device)
+        c = conditions.as_tensor(device).unsqueeze(0)
+        z = self.net.initial_state(c, 1, device=device)
+        h = self.app.initial_state(1, device=device)
         prev = torch.zeros(1, 4, device=device)
         epochs: list[Epoch] = []
         z_frozen = z
+        gen = generator if device.type == "cpu" else None
         for i in range(n_steps):
             if unconditioned:
                 z_in = torch.zeros_like(z)
@@ -46,9 +48,9 @@ class CoupledLoop:
             params, h = self.app.step(h, context, z_in, prev)
             from netcond.app.tpp import sample_mix_lognormal
 
-            a = sample_mix_lognormal(params["a_w"], params["a_mu"], params["a_s"], generator).clamp(80, 20_000)
-            b = sample_mix_lognormal(params["b_w"], params["b_mu"], params["b_s"], generator).clamp(500, 5_000_000)
-            t = sample_mix_lognormal(params["t_w"], params["t_mu"], params["t_s"], generator).clamp(1e-3, 30.0)
+            a = sample_mix_lognormal(params["a_w"], params["a_mu"], params["a_s"], gen).clamp(80, 20_000)
+            b = sample_mix_lognormal(params["b_w"], params["b_mu"], params["b_s"], gen).clamp(500, 5_000_000)
+            t = sample_mix_lognormal(params["t_w"], params["t_mu"], params["t_s"], gen).clamp(1e-3, 30.0)
             if i == n_steps - 1:
                 t = torch.zeros_like(t)
             d = torch.argmax(params["dir_logits"], dim=-1)

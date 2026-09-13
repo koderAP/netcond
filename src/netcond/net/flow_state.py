@@ -29,11 +29,13 @@ class FlowNetwork(nn.Module):
         self.loss_head = nn.Sequential(nn.Linear(latent_dim, hidden_dim), nn.SiLU(), nn.Linear(hidden_dim, 1))
 
     def encode_conditions(self, conditions: Tensor) -> Tensor:
-        return self.cond_enc(conditions)
+        return self.cond_enc(conditions.to(next(self.parameters()).device, dtype=torch.float32))
 
-    def initial_state(self, conditions: Tensor, batch_size: int, device: str | None = None) -> Tensor:
+    def initial_state(self, conditions: Tensor, batch_size: int = 1, device: str | torch.device | None = None) -> Tensor:
         if conditions.dim() == 1:
-            conditions = conditions.unsqueeze(0).expand(batch_size, -1)
+            conditions = conditions.unsqueeze(0)
+        if conditions.size(0) == 1 and batch_size > 1:
+            conditions = conditions.expand(batch_size, -1)
         z = self.encode_conditions(conditions)
         if device is not None:
             z = z.to(device)
@@ -43,8 +45,8 @@ class FlowNetwork(nn.Module):
         self, latent: Tensor, epoch_feat: Tensor, conditions: Tensor
     ) -> tuple[Tensor, dict[str, Tensor]]:
         cond_z = self.encode_conditions(conditions)
-        x = torch.cat([self.adu_enc(epoch_feat), cond_z], dim=-1)
-        z = self.gru(x, latent)
+        x = torch.cat([self.adu_enc(epoch_feat.to(cond_z.device)), cond_z], dim=-1)
+        z = self.gru(x, latent.to(cond_z.device))
         log_tt = self.tt_head(z)
         rtt = torch.nn.functional.softplus(self.rtt_head(z)) + 1e-4
         loss_p = torch.sigmoid(self.loss_head(z))
