@@ -6,7 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
-from netcond.data.intervene import collect_dataset, load_traces
+from netcond.data.dataset import split_traces
 from netcond.eval.report import evaluate, format_table
 from netcond.generate import generate
 from netcond.realize.emulator import DumbbellRealizer
@@ -37,8 +37,7 @@ def run(
             pcap_dir=out_dir / "pcaps",
         )
     traces = load_traces(data_path)
-    n = len(traces)
-    train, hold = traces[: int(0.75 * n)], traces[int(0.75 * n) :]
+    train, hold = split_traces(traces, frac=0.75, seed=0)
     ckpts = []
     uncond = []
     for s in seeds:

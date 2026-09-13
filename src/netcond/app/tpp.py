@@ -46,7 +46,7 @@ class ConditionedMarkedTPP(nn.Module):
         feedback_dim: int = 16,
         hidden_dim: int = 64,
         context_dim: int = 4,
-        n_mix: int = 2,
+        n_mix: int = 3,
     ) -> None:
         super().__init__()
         self.feedback_dim = feedback_dim

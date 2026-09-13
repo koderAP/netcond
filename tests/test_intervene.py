@@ -32,6 +32,22 @@ def test_transfer_time_increases_with_rtt():
     assert t1 > t0
 
 
+def test_stratified_split(tmp_path):
+    from netcond.data.dataset import split_traces
+
+    traces = collect_dataset(
+        tmp_path / "split.json",
+        n_per_preset=4,
+        presets=("lan", "wan"),
+        apps=("dash_like",),
+        seed=0,
+    )
+    train, hold = split_traces(traces, frac=0.75, seed=1)
+    hold_presets = {tr.conditions.preset for tr in hold}
+    assert hold_presets == {"lan", "wan"}
+    assert len(train) + len(hold) == len(traces)
+
+
 def test_collect_small(tmp_path):
     traces = collect_dataset(
         tmp_path / "d.json",

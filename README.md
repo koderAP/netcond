@@ -36,6 +36,19 @@ pip install -e ".[dev]"
 pytest -q
 python examples/minimal_slice.py
 python scripts/run_slice.py --epochs 18 --n-per-preset 8
+
+## Prithvi A40 slice (3 seeds, mean ± std)
+
+First GPU run (contiguous split — **TSTR invalid**). After physics residual + stratified split, re-run `output/prithvi`.
+
+| metric | neural | uncond TPP | tmix-resample |
+|---|---|---|---|
+| EMD log b | 1.85 ± 0.08 | 1.99 ± 0.25 | 2.59 ± 0.01 |
+| EMD log think t | 0.56 ± 0.11 | — | **0.035 ± 0.01** |
+| EMD log transfer | 1.34 ± 0.21 | — | 1.00 ± 0.02 |
+| 2×RTT direction | 3/3 True (ratio ~1.3, under-scaled) | — | — |
+
+Neural beats resample on response-size `b` (the adaptive mark). Resample still wins think time (exogenous, copied from train). Network RTT head needed a `base_rtt × (1+softplus)` residual — that is the second slice.
 ```
 
 `run_slice.py` collects interventional traces (HTTP GET + DASH-like client under `lan`/`wan`/`congested`), trains **3 seeds** of the conditioned model **and** a TempoNet-style unconditioned TPP, generates `lan` vs `congested`, and prints neural vs uncond vs Tmix-resample (mean ± std). Output: `output/slice/eval_table.txt`.

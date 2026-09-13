@@ -61,7 +61,7 @@ def evaluate(
     app_kind: str = "dash_like",
     uncond_ckpts: list[str] | None = None,
 ) -> dict:
-    presets = sorted({tr.conditions.preset for tr in holdout if tr.conditions.preset}) or [preset]
+    presets = ("lan", "wan", "congested")
     real = [tr for tr in holdout if tr.app_kind == app_kind and (not preset or tr.conditions.preset == preset)]
     if not real:
         real = [tr for tr in holdout if tr.app_kind == app_kind]
@@ -71,7 +71,7 @@ def evaluate(
     for i, ck in enumerate(ckpts):
         loop = load_checkpoint(ck)
         syn = generate(loop, preset, app_kind=app_kind, n_sessions=max(8, len(real)), n_steps=8, seed=10 + i)
-        syn_all = _gen_by_preset(loop, presets, app_kind, 6, 8, 20 + i)
+        syn_all = _gen_by_preset(loop, presets, app_kind, 8, 8, 20 + i)
         base = resample_traces(
             train,
             preset_conditions(preset),
@@ -155,6 +155,7 @@ def format_table(report: dict) -> str:
 def main(argv=None) -> None:
     import argparse
 
+    from netcond.data.dataset import split_traces
     from netcond.data.intervene import load_traces
 
     p = argparse.ArgumentParser()
@@ -164,8 +165,7 @@ def main(argv=None) -> None:
     p.add_argument("--out", default="output/eval.json")
     args = p.parse_args(argv)
     traces = load_traces(args.data)
-    n = len(traces)
-    train, hold = traces[: int(0.8 * n)], traces[int(0.8 * n) :]
+    train, hold = split_traces(traces, frac=0.8, seed=0)
     report = evaluate(args.ckpts, train, hold, uncond_ckpts=args.uncond_ckpts or None)
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(json.dumps(report, indent=2, default=str))

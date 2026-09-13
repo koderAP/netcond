@@ -47,16 +47,26 @@ class FlowNetwork(nn.Module):
         cond_z = self.encode_conditions(conditions)
         x = torch.cat([self.adu_enc(epoch_feat.to(cond_z.device)), cond_z], dim=-1)
         z = self.gru(x, latent.to(cond_z.device))
-        log_tt = self.tt_head(z)
-        rtt = torch.nn.functional.softplus(self.rtt_head(z)) + 1e-4
+        c = conditions.to(z.device, dtype=torch.float32)
+        if c.dim() == 1:
+            c = c.unsqueeze(0)
+        cap_bps = (10.0 ** c[:, 0]) * 1e6
+        base_rtt = (10.0 ** c[:, 1]) / 1e3
+        sizes = epoch_feat.to(z.device).exp()
+        serial_a = sizes[:, 0] * 8.0 / cap_bps.clamp_min(1.0)
+        serial_b = sizes[:, 1] * 8.0 / cap_bps.clamp_min(1.0)
+        rtt = base_rtt * (1.0 + torch.nn.functional.softplus(self.rtt_head(z)).squeeze(-1))
+        res = torch.tanh(self.tt_head(z))
+        transfer_a = (serial_a + rtt).clamp_min(1e-6) * torch.exp(0.5 * res[:, 0])
+        transfer_b = (serial_b + rtt).clamp_min(1e-6) * torch.exp(0.5 * res[:, 1])
         loss_p = torch.sigmoid(self.loss_head(z))
         obs = {
-            "log_transfer_a": log_tt[:, 0],
-            "log_transfer_b": log_tt[:, 1],
-            "rtt": rtt.squeeze(-1),
+            "log_transfer_a": transfer_a.clamp_min(1e-6).log(),
+            "log_transfer_b": transfer_b.clamp_min(1e-6).log(),
+            "rtt": rtt,
             "loss": loss_p.squeeze(-1),
-            "transfer_a": log_tt[:, 0].exp(),
-            "transfer_b": log_tt[:, 1].exp(),
+            "transfer_a": transfer_a,
+            "transfer_b": transfer_b,
         }
         return z, obs
 

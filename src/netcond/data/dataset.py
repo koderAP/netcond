@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass
+import random
 
 import torch
 from torch import Tensor
@@ -64,3 +66,23 @@ def traces_to_batch(traces: list[Trace], device: str | None = None) -> Batch:
         for f in batch.__dataclass_fields__:
             setattr(batch, f, getattr(batch, f).to(device))
     return batch
+
+
+def split_traces(traces: list[Trace], frac: float = 0.75, seed: int = 0) -> tuple[list[Trace], list[Trace]]:
+    """Stratify by (app_kind, preset) so holdout covers every do(c) cell."""
+    buckets: dict[tuple[str, str], list[Trace]] = defaultdict(list)
+    for tr in traces:
+        buckets[(tr.app_kind, tr.conditions.preset or "")].append(tr)
+    rng = random.Random(seed)
+    train: list[Trace] = []
+    hold: list[Trace] = []
+    for _k, group in buckets.items():
+        g = list(group)
+        rng.shuffle(g)
+        if len(g) == 1:
+            train.extend(g)
+            continue
+        n_train = max(1, min(len(g) - 1, int(round(frac * len(g)))))
+        train.extend(g[:n_train])
+        hold.extend(g[n_train:])
+    return train, hold
