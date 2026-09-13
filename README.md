@@ -36,29 +36,29 @@ pip install -e ".[dev]"
 pytest -q
 python examples/minimal_slice.py
 python scripts/run_slice.py --epochs 18 --n-per-preset 8
+```
 
 ## Prithvi A40 (3 seeds, mean ± std)
 
-Trained on `prithvi.cse.iitd.ac.in` (NVIDIA A40). Contiguous split made TSTR degenerate; **run 2** uses stratified `(app, preset)` splits and a physics residual network head (`rtt = base_rtt × (1+softplus)`, transfer anchored to serialization+RTT).
+Trained on `prithvi.cse.iitd.ac.in` (NVIDIA A40). **Run 3** is the headline: DASH bitrate ladder conditioned on `z`, think-time head without `z` (Tmix), slow-start/cross-traffic transfer decoder, stratified `do(c)` split.
 
-**Run 2** (`output/prithvi2`, 60 epochs, 16 traces/preset/app):
+**Run 3** (`output/prithvi3`, 80 epochs, 24 traces/preset/app):
 
 | metric | neural | uncond TPP | tmix-resample |
 |---|---|---|---|
-| EMD log response `b` | 1.55 ± 0.43 | 2.33 ± 0.05 | **0.98 ± 0.13** |
-| EMD log think `t` | 0.39 ± 0.11 | — | **0.05 ± 0.02** |
-| EMD log transfer | 1.33 ± 0.19 | — | **0.84 ± 0.05** |
-| TSTR condition-id | 0.36 ± 0.10 | — | TRTR **1.00 ± 0.00** |
-| 2× base RTT | **3/3 True**, ratio **~1.95** (was ~1.3) | — | — |
+| EMD log response `b` | **0.081 ± 0.062** | 1.084 ± 0.447 | 0.899 ± 0.109 |
+| EMD log think `t` | 0.247 ± 0.079 | — | **0.059 ± 0.022** |
+| EMD log transfer | **0.345 ± 0.118** | — | 0.797 ± 0.031 |
+| Q–Q MAE log `b` | **0.074 ± 0.051** | — | — |
+| TSTR condition-id | **1.00 ± 0.00** | — | TRTR 1.00 |
+| 2× base RTT | **3/3 True** (ratio 1.6–1.9) | — | — |
+| mean chunk `b` lan vs congested | **1.25e6 vs 1.30e5** (3/3) | — | — |
 
-Counterfactual RTT under `congested` now matches holdout (~0.17s vs ~0.17s). Transfer times are still short vs emulator (queueing residual underfit). Resample remains the think-time / size-marginal baseline to beat; conditioned TPP beats the **unconditioned** TPP on `b` (1.55 vs 2.33).
+Conditioning on `do(c)` beats Tmix resampling **and** a TempoNet-style unconditioned TPP on the adaptive mark `b` and on transfer time. TSTR matches train-real-test-real. Think time remains a resample problem (exogenous). Congested transfer is still a bit short vs the emulator (~2–4s vs ~4.6s).
 
-**Run 1** (invalid TSTR, unconstrained RTT): neural `b` EMD 1.85 vs resample 2.59 — not comparable after the split fix.
-```
+Run 2 (continuous log-normal `b`): neural lost to resample on `b` (1.55 vs 0.98). Run 1 used a contiguous split (TSTR invalid).
 
-`run_slice.py` collects interventional traces (HTTP GET + DASH-like client under `lan`/`wan`/`congested`), trains **3 seeds** of the conditioned model **and** a TempoNet-style unconditioned TPP, generates `lan` vs `congested`, and prints neural vs uncond vs Tmix-resample (mean ± std). Output: `output/slice/eval_table.txt`.
-
-This is a **new repository** (`netcond`). It does not modify `netgen_cod892`.
+`run_slice.py` collects interventional traces, trains 3 seeds plus an unconditioned TPP, and prints the table. This repo does not modify `netgen_cod892`.
 
 ### Prithvi (IITD CSE A40)
 
